@@ -13,24 +13,6 @@ int vueltas1 ;
 int vueltas2 ;
 int nvueltas = 11; //10 (+1) vueltas por defecto, hay que tener en cuenta que segun sales descuenta una.
 
-// esto imprime el nº de vueltas en el display.
-void vueltas(){
-  int d1,d2,d3,d4;
-  d2 = vueltas1 % 10;
-  d1 = vueltas1 / 10;
-  d4 = vueltas2 % 10;
-  d3 = vueltas2 / 10;
-  
-  module.setDisplayDigit(d1, 0, false);
-  module.setDisplayDigit(d2, 1, false);
-  module.clearDisplayDigit(2, false);
-  module.clearDisplayDigit(3, false);
-  module.clearDisplayDigit(4, false);
-  module.clearDisplayDigit(5, false); 
-  module.setDisplayDigit(d3, 6, false);
-  module.setDisplayDigit(d4, 7, false);
-}
-
 // La inicializacion y banner de presentacion.
 void setup() {
   // put your setup code here, to run once:
@@ -47,6 +29,33 @@ void setup() {
   }
   module.clearDisplay();              //clears the display from garbage if any
   module.setupDisplay(true,7);
+  module.setDisplayToString(" READY? ");    //prints the banner
+}
+
+// esto imprime el nº de vueltas en el display.
+void vueltas(){
+  int d1,d2,d3,d4;
+  d2 = vueltas1 % 10;
+  d1 = vueltas1 / 10;
+  d4 = vueltas2 % 10;
+  d3 = vueltas2 / 10;
+
+  if ((vueltas1 == nvueltas) && (state>=50)) {
+   module.setDisplayToString("GO    ", 0, 0);
+  } else {  
+    module.setDisplayDigit(d1, 0, false);
+    module.setDisplayDigit(d2, 1, false);
+    module.clearDisplayDigit(2, false);  
+    module.clearDisplayDigit(3, false);
+    module.clearDisplayDigit(4, false);
+    module.clearDisplayDigit(5, false); 
+  }
+  if ((vueltas2 == nvueltas) && (state>=50)) {
+   module.setDisplayToString("GO", 0, 6);
+  } else {  
+    module.setDisplayDigit(d3, 6, false);
+    module.setDisplayDigit(d4, 7, false);
+  }
 }
 
 // Devuelve el bit de la tecla pulsada cuando esta se suelta.
@@ -67,9 +76,8 @@ tecla_prev = tecla;
 return r;  
 }
   
-
 // simple rutina que lee flancos en los sensores, como se llama aprox cada 10ms, actua ademas de antirebote.
-int leesensores(){
+int leesensores(){ // FIXME reescribir para que sea similar a leetecla
 static int pos1 = 0;
 static int pos2 = 0;
 int r=0;
@@ -102,13 +110,32 @@ void loop() {
 int teclas;
 int sensores;
 int cambio =0;
+static int tick1 =0;
+static int tick2 =0;
 
 teclas=leetecla();
 if ((teclas & 0x01)!=0) { // empezar la carrera
   vueltas1 = nvueltas;
   vueltas2 = nvueltas;
-  tick = 0 ;
+  tick1 = tick2 = tick = 0 ;
   state = ST_RUN ;
+  module.setDisplayToString("--    --");    //prints the banner
+  cambio = 0;
+}
+if ((teclas & 0x02)!=0) { // subir nº vueltas
+  nvueltas +=1;
+  if (nvueltas >=99) nvueltas = 99;
+  vueltas1 = nvueltas;
+  vueltas2 = nvueltas;
+  state = ST_STOP ;
+  cambio = 1;
+}
+if ((teclas & 0x04)!=0) { // empezar la carrera
+  nvueltas -= 1;
+  if (nvueltas <=2) nvueltas = 2;
+  vueltas1 = nvueltas;
+  vueltas2 = nvueltas;
+  state = ST_STOP ;
   cambio = 1;
 }
 
@@ -127,6 +154,7 @@ if (state >= 50) {  //Los modos >=50 el temporizador corre.
      module.setLEDs(0x00FF);
   } else if (tick == 500) { // LED EN VERDE USAR EL VALOR MAS ABAJO
      module.setLEDs(0xFF00);
+     cambio = 1;
   } else if (tick == 600) {
      module.setLEDs(0xFF00);
   } else if (tick == 800) {
@@ -135,7 +163,7 @@ if (state >= 50) {  //Los modos >=50 el temporizador corre.
 
 sensores=leesensores();
 // Evaluamos salida en falso
-if (tick < 500){
+if (tick < 500){ // Valor de led en verde.
   if ((sensores & 0b0001)!=0) {
      module.setDisplayToString("FAUL    ");    //prints the banner
      cambio = 0;
@@ -148,12 +176,14 @@ if (tick < 500){
   }
 } else {
 // contador de vueltas
-if ((sensores & 0b0001)!=0) {
+if (((sensores & 0b0001)!=0) && tick1<tick) {
   vueltas1 = vueltas1 -1;
+  tick1= tick + 50; // esto evita rebotes lentos, p.e. si el coche tiene 2 imanes.
   cambio =1;
   }
-if ((sensores & 0b0010)!=0) {
+if (((sensores & 0b0010)!=0) && tick2<tick) {
   vueltas2 = vueltas2 -1;
+  tick2= tick + 50;
   cambio =1;
   }  
 }
@@ -161,17 +191,17 @@ if ((sensores & 0b0010)!=0) {
 // Evaluamos si alguno gana
 if (vueltas1 ==0) {
     if (vueltas2 == 0) {
-       module.setDisplayToString("-Empate-");    //prints the banner
+       module.setDisplayToString("-Empate-");    
        cambio = 0;
        state = ST_STOP;
     } else {
-       module.setDisplayToString("GANA    ");    //prints the banner
+       module.setDisplayToString("GANA    ");    
        cambio = 0;
        state = ST_STOP;
     }
 } else {
     if (vueltas2 == 0) {
-       module.setDisplayToString("    GANA");    //prints the banner
+       module.setDisplayToString("    GANA");    
        cambio = 0;
        state = ST_STOP;
     }
