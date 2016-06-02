@@ -1,6 +1,13 @@
 /* (C) 2014 Alvaro Alea Fernandez <alvaroalea@gmail.com>  *
  * Distribuido con licencia GPL Version 3                 */
 
+#define NO_PORTB_PINCHANGES // to indicate that port b (D9 - D13) will not be used for pin change interrupts
+#define NO_PORTC_PINCHANGES // to indicate that port c (A0 - A5) will not be used for pin change interrupts
+// #define NO_PIN_STATE        // to indicate that you don't need the pinState
+// #define NO_PIN_NUMBER       // to indicate that you don't need the arduinoPin
+// #define       DISABLE_PCINT_MULTI_SERVICE
+#include <PinChangeInt.h> // ckeck https://code.google.com/p/arduino-pinchangeint/
+
 #include <TM1638.h> // ckeck https://code.google.com/p/tm1638-library/
 TM1638 module(7, 4, 2);
 
@@ -56,6 +63,21 @@ void vueltas(){
     module.setDisplayDigit(d3, 6, false);
     module.setDisplayDigit(d4, 7, false);
   }
+PCintPort::attachInterrupt(5, &interrupcion, CHANGE); // Tambien admite RISING
+PCintPort::attachInterrupt(6, &interrupcion, CHANGE);
+}
+
+// la interrupcion que lee los sensores
+// Podria mejorarse, si solo se la llama en RISING y usa una funcion para cada uno.
+volatile int sensores;
+void interrupcion(){ // vector de interrupcion, mientras se ejecuta las interrupciones estas desactivades. ¿Seguro?
+ static int laststate= 0x03;
+ int in1, in2;
+ in1=digitalRead(6);
+ in2=digitalRead(5);
+ if (((in1==1) && ((laststate & 0b001)==0)) && ((sensores & 0b001)==0)) sensores += 0b001 ; // deteccion de flanco, logica inversa, coche=0, vacio=1 
+ if (((in2==1) && ((laststate & 0b010)==0)) && ((sensores & 0b010)==0)) sensores += 0b010 ; // si es un uno, antes era un cero, y sensores esta a cero, ponlo a uno. 
+ laststate = in1 + ( 0b010 * in2 );
 }
 
 // Devuelve el bit de la tecla pulsada cuando esta se suelta.
@@ -75,7 +97,8 @@ if (((tecla_prev & 0x80)!=0) && ((tecla & 0x80)==0)) r += 0x80 ;
 tecla_prev = tecla;
 return r;  
 }
-  
+
+/*  
 // simple rutina que lee flancos en los sensores, como se llama aprox cada 10ms, actua ademas de antirebote.
 int leesensores(){ // FIXME reescribir para que sea similar a leetecla
 static int pos1 = 0;
@@ -103,12 +126,12 @@ if ((pos2 ==1) && (in2 == 1)) {
 
 return r;
 }
-
+*/
 
 void loop() {
   // put your main code here, to run repeatedly: 
 int teclas;
-int sensores;
+//int sensores;
 int cambio =0;
 static int tick1 =0;
 static int tick2 =0;
@@ -121,6 +144,7 @@ if ((teclas & 0x01)!=0) { // empezar la carrera
   state = ST_RUN ;
   module.setDisplayToString("--    --");    //prints the banner
   cambio = 0;
+  sensores = 0 ; //borramos sensores pendientes.
 }
 if ((teclas & 0x02)!=0) { // subir nº vueltas
   nvueltas +=1;
@@ -130,7 +154,7 @@ if ((teclas & 0x02)!=0) { // subir nº vueltas
   state = ST_STOP ;
   cambio = 1;
 }
-if ((teclas & 0x04)!=0) { // empezar la carrera
+if ((teclas & 0x04)!=0) { // bajar nº vueltas
   nvueltas -= 1;
   if (nvueltas <=2) nvueltas = 2;
   vueltas1 = nvueltas;
@@ -161,33 +185,42 @@ if (state >= 50) {  //Los modos >=50 el temporizador corre.
      module.setLEDs(0x0000);
   }
 
-sensores=leesensores();
+//sensores=leesensores();
 // Evaluamos salida en falso
 if (tick < 500){ // Valor de led en verde.
   if ((sensores & 0b0001)!=0) {
+     sensores = sensores - 0b001;
      module.setDisplayToString("FAUL    ");    //prints the banner
      cambio = 0;
      state = ST_STOP;
   }
   if ((sensores & 0b0010)!=0) {
+     sensores = sensores -0x010;
      module.setDisplayToString("    FAUL");    //prints the banner
      cambio = 0;
      state = ST_STOP;
   }
 } else {
-// contador de vueltas
-if (((sensores & 0b0001)!=0) && tick1<tick) {
-  vueltas1 = vueltas1 -1;
-  tick1= tick + 50; // esto evita rebotes lentos, p.e. si el coche tiene 2 imanes.
-  cambio =1;
+  // contador de vueltas
+  if ((sensores & 0b0001)!=0) {
+    if (tick1<tick) {
+      vueltas1 = vueltas1 -1;
+      tick1= tick + 50; // esto evita rebotes lentos, p.e. si el coche tiene 2 imanes.
+      cambio =1;
+    } else {
+      sensores = sensores - 0b001; // si hubiera un rebote lo quitamos.
+    }
   }
-if (((sensores & 0b0010)!=0) && tick2<tick) {
-  vueltas2 = vueltas2 -1;
-  tick2= tick + 50;
-  cambio =1;
-  }  
+  if ((sensores & 0b0010)!=0) {
+    if (tick2<tick) {
+      vueltas2 = vueltas2 -1;
+      tick2= tick + 50;
+      cambio =1;
+    } else {
+      sensores = sensores - 0b010;   
+    } 
+  }
 }
-
 // Evaluamos si alguno gana
 if (vueltas1 ==0) {
     if (vueltas2 == 0) {
@@ -215,3 +248,4 @@ if (cambio==1){
   }  
 delay(10);
 }
+
