@@ -36,7 +36,7 @@ void setup() {
   }
   module.clearDisplay();              //clears the display from garbage if any
   module.setupDisplay(true,7);
-  module.setDisplayToString(" READY? ");    //prints the banner
+  module.setDisplayToString(" REAdy? ");    //prints the banner
 }
 
 // esto imprime el nº de vueltas en el display.
@@ -149,16 +149,16 @@ if ((teclas & 0x01)!=0) { // empezar la carrera
 if ((teclas & 0x02)!=0) { // subir nº vueltas
   nvueltas +=1;
   if (nvueltas >=99) nvueltas = 99;
-  vueltas1 = nvueltas;
-  vueltas2 = nvueltas;
+  vueltas1 = nvueltas-1;
+  vueltas2 = nvueltas-1;
   state = ST_STOP ;
   cambio = 1;
 }
 if ((teclas & 0x04)!=0) { // bajar nº vueltas
   nvueltas -= 1;
   if (nvueltas <=2) nvueltas = 2;
-  vueltas1 = nvueltas;
-  vueltas2 = nvueltas;
+  vueltas1 = nvueltas-1;
+  vueltas2 = nvueltas-1;
   state = ST_STOP ;
   cambio = 1;
 }
